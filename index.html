@@ -103,7 +103,23 @@
   .hrow .hd{width:8px;height:8px;border-radius:50%;flex:none;} .hrow .hdate{font-family:Sora;font-weight:600;min-width:52px;} .hrow .hwk{color:var(--muted);width:34px;font-size:12px;}
   .hrow .hnote{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
   .hrow .hval{margin-left:auto;font-weight:700;font-size:12.5px;font-family:Sora;flex:none;font-variant-numeric:tabular-nums;}
+  .hrow .hmeta{display:flex;flex-direction:column;gap:1px;color:var(--faint);font-size:10.5px;max-width:140px;text-align:right;flex:none;margin-left:8px;}
+  .hrow .hmeta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hrow .hedit{color:var(--parcial);font-size:10px;font-weight:600;}
   .empty{padding:30px 16px;color:var(--faint);text-align:center;font-size:13px;}
+
+  .online-panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px 16px;margin-bottom:16px;}
+  .online-panel .op-title{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .online-panel .op-title .oc{font-family:Sora;font-size:12px;color:var(--exito);background:var(--exito-soft);padding:2px 8px;border-radius:999px;}
+  .op-list{display:flex;flex-wrap:wrap;gap:8px;}
+  .op-user{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface2);border:1px solid var(--line2);border-radius:9px;font-size:12px;font-weight:500;}
+  .op-user .od{width:7px;height:7px;border-radius:50%;background:var(--exito);box-shadow:0 0 8px var(--exito);flex:none;}
+  .op-empty{color:var(--faint);font-size:12px;}
+
+  .notif-toast{position:fixed;top:16px;right:16px;background:var(--surface);border:1px solid var(--exito);border-radius:12px;padding:12px 16px;box-shadow:0 8px 30px rgba(0,0,0,.5);z-index:70;opacity:0;transform:translateY(-10px);transition:.3s;pointer-events:none;max-width:340px;}
+  .notif-toast.show{opacity:1;transform:translateY(0);}
+  .notif-toast .nt-title{font-family:Sora;font-weight:600;font-size:13px;color:var(--exito);margin-bottom:3px;}
+  .notif-toast .nt-body{font-size:12px;color:var(--muted);}
 
   .fech{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;}
   .fech .fh{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;gap:12px;flex-wrap:wrap;}
@@ -173,6 +189,11 @@
     </div>
   </header>
 
+  <div class="online-panel adminOnly" id="onlinePanel">
+    <div class="op-title">Online agora <span class="oc" id="onlineCount">0</span></div>
+    <div class="op-list" id="onlineList"><span class="op-empty">ninguém conectado</span></div>
+  </div>
+
   <div class="modeltabs" id="modelTabs"></div>
   <section class="kpis" id="kpis"></section>
 
@@ -233,6 +254,7 @@
   <div class="sheet-actions"><button class="btn primary" id="gerClose">Concluir</button></div>
 </div></div>
 
+<div class="notif-toast" id="notifToast"><div class="nt-title" id="ntTitle"></div><div class="nt-body" id="ntBody"></div></div>
 <div class="save-flash" id="flash">Salvo</div>
 
 <script>
@@ -357,12 +379,36 @@
     }
     cal.appendChild(frag); renderHist();
   }
+  // ---------------- tracking helpers ----------------
+  function getDevice(){
+    const ua=navigator.userAgent;
+    let dev='Desktop'; if(/iPhone/i.test(ua))dev='iPhone';else if(/Android/i.test(ua))dev='Android';else if(/iPad/i.test(ua))dev='iPad';
+    let br='';if(/Chrome/i.test(ua)&&!/Edg/i.test(ua))br='Chrome';else if(/Safari/i.test(ua)&&!/Chrome/i.test(ua))br='Safari';else if(/Firefox/i.test(ua))br='Firefox';else if(/Edg/i.test(ua))br='Edge';
+    return br?`${dev} · ${br}`:dev;
+  }
+  let cachedGeo=null;
+  async function getGeoIP(){
+    if(cachedGeo)return cachedGeo;
+    try{const r=await fetch('https://ipapi.co/json/',{signal:AbortSignal.timeout(4000)});const d=await r.json();cachedGeo={ip:d.ip||'',geo:(d.city||'')+(d.region?', '+d.region:'')+(d.country_name?' · '+d.country_name:'')};return cachedGeo;}
+    catch(e){return {ip:'',geo:''};}
+  }
+  function fmtTime(ts){ if(!ts)return ''; const d=new Date(ts); return `${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+  function showNotif(title,body){ const el=$('#notifToast'); $('#ntTitle').textContent=title; $('#ntBody').textContent=body; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),4000); }
+
   function renderHist(){
     const admin=role==='admin', data=entries[curMid]||{}, pr=priceOf(curMid);
     const dim=new Date(vY,vM+1,0).getDate(), rows=[], col={completo:'var(--exito)',parcial:'var(--parcial)'}, lbl={completo:'Completo',parcial:'Parcial'};
     for(let d=dim;d>=1;d--){const key=ymd(vY,vM,d),e=data[key],st=statusOf(e);if(st==='pendente')continue;const dt=new Date(vY,vM,d);
       const right=admin?`<span class="hval num" style="color:${col[st]}">${fmt(earned(e,pr))}</span>`:`<span class="hval num" style="color:${col[st]}">${pecas(e)}/${PECAS_ALVO}</span>`;
-      rows.push(`<div class="hrow"><span class="hd" style="background:${col[st]}"></span><span class="hdate">${pad(d)}/${pad(vM+1)}</span><span class="hwk">${WK[dt.getDay()]}</span><span class="hnote">${lbl[st]}${e.nota?' · '+esc(e.nota):''}</span>${right}</div>`);}
+      let meta='';
+      if(admin && e){
+        const time=fmtTime(e.updated_at||e.created_at);
+        const dev=e.device||'';
+        const geo=e.geo||'';
+        const edits=(e.edit_count||1)>1?`<span class="hedit">editado ${e.edit_count}×</span>`:'';
+        meta=`<div class="hmeta"><span>${time}${dev?' · '+dev:''}</span>${geo?'<span>'+esc(geo)+'</span>':''}${edits}</div>`;
+      }
+      rows.push(`<div class="hrow"><span class="hd" style="background:${col[st]}"></span><span class="hdate">${pad(d)}/${pad(vM+1)}</span><span class="hwk">${WK[dt.getDay()]}</span><span class="hnote">${lbl[st]}${e.nota?' · '+esc(e.nota):''}</span>${meta}${right}</div>`);}
     $('#hist').innerHTML=rows.length?rows.join(''):'<div class="empty">Nenhum dia lançado neste mês.</div>';
   }
   function renderFech(){
@@ -414,8 +460,12 @@
     const nota=$('#dayNote').value.trim(); editEntry.nota=nota;
     const total=CT.reduce((s,c)=>s+(editEntry[c.key]||0),0);
     if(total===0 && !nota){ await sb.from('entries').delete().eq('model_id',curMid).eq('dia',editKey); }
-    else { const row={model_id:curMid,dia:editKey,nota}; CT.forEach(c=>row[c.key]=editEntry[c.key]||0);
-      const {error}=await sb.from('entries').upsert(row,{onConflict:'model_id,dia'}); if(error){flash('Erro ao salvar');console.error(error);return;} }
+    else {
+      const geoData=await getGeoIP();
+      const row={model_id:curMid,dia:editKey,nota,device:getDevice(),ip:geoData.ip,geo:geoData.geo};
+      CT.forEach(c=>row[c.key]=editEntry[c.key]||0);
+      const {error}=await sb.from('entries').upsert(row,{onConflict:'model_id,dia'}); if(error){flash('Erro ao salvar');console.error(error);return;}
+    }
     closeDay(); await reloadMonth(); flash('Dia salvo');
   });
 
@@ -466,11 +516,39 @@
   $('#nextM').addEventListener('click',async()=>{vM++;if(vM>11){vM=0;vY++;}await reloadMonth();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDay();$('#cfgBackdrop').classList.remove('show');$('#gerBackdrop').classList.remove('show');}});
 
-  let rtChannel=null;
+  let rtChannel=null, presChannel=null;
   function subscribeRealtime(){
     if(rtChannel)sb.removeChannel(rtChannel);
-    rtChannel=sb.channel('rt-entries').on('postgres_changes',{event:'*',schema:'public',table:'entries'},()=>{ reloadMonth(); })
-      .subscribe(st=>{ $('#rtBadge').classList.toggle('off', st!=='SUBSCRIBED'); });
+    rtChannel=sb.channel('rt-entries').on('postgres_changes',{event:'*',schema:'public',table:'entries'},(payload)=>{
+      reloadMonth();
+      if(role==='admin' && payload.eventType==='INSERT'){
+        const mo=models.find(m=>m.id===payload.new.model_id);
+        const g=mo&&mo.gerador_id?gerName(mo.gerador_id):'Gerador';
+        showNotif('Nova entrega','@'+(g||'?')+' lançou em '+(mo?mo.nome:'modelo'));
+      } else if(role==='admin' && payload.eventType==='UPDATE'){
+        const mo=models.find(m=>m.id===payload.new.model_id);
+        const g=mo&&mo.gerador_id?gerName(mo.gerador_id):'Gerador';
+        showNotif('Entrega editada','@'+(g||'?')+' atualizou '+(mo?mo.nome:'modelo'));
+      }
+    }).subscribe(st=>{ $('#rtBadge').classList.toggle('off', st!=='SUBSCRIBED'); });
+  }
+  function subscribePresence(){
+    if(presChannel)sb.removeChannel(presChannel);
+    presChannel=sb.channel('online-users',{config:{presence:{key:myEmail}}});
+    presChannel.on('presence',{event:'sync'},()=>renderOnline(presChannel.presenceState()));
+    presChannel.subscribe(async(st)=>{ if(st==='SUBSCRIBED') await presChannel.track({email:myEmail,role,joined:new Date().toISOString()}); });
+  }
+  function renderOnline(state){
+    if(role!=='admin')return;
+    const users=Object.values(state||{}).flat().map(u=>u.email).filter(Boolean);
+    const unique=[...new Set(users)];
+    $('#onlineCount').textContent=unique.length;
+    if(!unique.length){$('#onlineList').innerHTML='<span class="op-empty">ninguém conectado</span>';return;}
+    $('#onlineList').innerHTML=unique.map(email=>{
+      const g=geradores.find(x=>x.email===email);
+      const label=g?g.nome:(email===myEmail?'Você (admin)':email);
+      return `<div class="op-user"><span class="od"></span>${esc(label)}</div>`;
+    }).join('');
   }
 
   // ---------------- auth / boot ----------------
@@ -482,7 +560,7 @@
     $('#subHead').textContent=admin?('CRM Material · '+myEmail):('Gerador · '+myEmail);
     $$('.adminOnly').forEach(el=>el.style.display=admin?'':'none');
     $('#disc').textContent=admin?'Venus IA · Pagamento por entrega. Cada modelo tem a tag do seu gerador. Atualiza em tempo real.':'Venus IA · Registre as peças concluídas. Meta: completar o pacote do dia.';
-    await reloadAll(); subscribeRealtime();
+    await reloadAll(); subscribeRealtime(); subscribePresence();
   }
   async function doLogin(){
     const email=$('#authEmail').value.trim(), pass=$('#authPass').value; const btn=$('#authBtn');
