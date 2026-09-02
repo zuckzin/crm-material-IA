@@ -99,13 +99,14 @@
   .stat-row>div{flex:1;padding:12px 16px;} .stat-row>div+div{border-left:1px solid var(--line2);}
   .stat-row .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;} .stat-row .v{font-family:Sora;font-weight:700;font-size:20px;margin-top:3px;}
   .hist{max-height:320px;overflow:auto;}
-  .hrow{display:flex;align-items:center;gap:11px;padding:10px 16px;border-top:1px solid var(--line2);font-size:13px;}
+  .hrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--line2);font-size:13px;}
   .hrow .hd{width:8px;height:8px;border-radius:50%;flex:none;} .hrow .hdate{font-family:Sora;font-weight:600;min-width:52px;} .hrow .hwk{color:var(--muted);width:34px;font-size:12px;}
-  .hrow .hnote{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
-  .hrow .hval{margin-left:auto;font-weight:700;font-size:12.5px;font-family:Sora;flex:none;font-variant-numeric:tabular-nums;}
-  .hrow .hmeta{display:flex;flex-direction:column;gap:1px;color:var(--faint);font-size:10.5px;max-width:140px;text-align:right;flex:none;margin-left:8px;}
-  .hrow .hmeta span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .hrow .hedit{color:var(--parcial);font-size:10px;font-weight:600;}
+  .hrow .hnote{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:60px;}
+  .hrow .hval{font-weight:700;font-size:12.5px;font-family:Sora;flex:none;font-variant-numeric:tabular-nums;}
+  .hrow .hmeta{width:100%;display:flex;align-items:center;gap:10px;padding:4px 0 0 16px;font-size:11px;color:var(--faint);flex-wrap:wrap;}
+  .hrow .hmeta .hm-item{display:inline-flex;align-items:center;gap:4px;}
+  .hrow .hmeta .hm-icon{font-size:12px;opacity:.7;}
+  .hrow .hmeta .hedit{color:var(--parcial);font-weight:600;}
   .empty{padding:30px 16px;color:var(--faint);text-align:center;font-size:13px;}
 
   .online-panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px 16px;margin-bottom:16px;}
@@ -402,13 +403,15 @@
       const right=admin?`<span class="hval num" style="color:${col[st]}">${fmt(earned(e,pr))}</span>`:`<span class="hval num" style="color:${col[st]}">${pecas(e)}/${PECAS_ALVO}</span>`;
       let meta='';
       if(admin && e){
+        const parts=[];
         const time=fmtTime(e.updated_at||e.created_at);
-        const dev=e.device||'';
-        const geo=e.geo||'';
-        const edits=(e.edit_count||1)>1?`<span class="hedit">editado ${e.edit_count}×</span>`:'';
-        meta=`<div class="hmeta"><span>${time}${dev?' · '+dev:''}</span>${geo?'<span>'+esc(geo)+'</span>':''}${edits}</div>`;
+        if(time) parts.push(`<span class="hm-item"><span class="hm-icon">🕐</span>${time}</span>`);
+        if(e.device) parts.push(`<span class="hm-item"><span class="hm-icon">📱</span>${esc(e.device)}</span>`);
+        if(e.geo) parts.push(`<span class="hm-item"><span class="hm-icon">📍</span>${esc(e.geo)}</span>`);
+        if((e.edit_count||1)>1) parts.push(`<span class="hm-item hedit">✏️ editado ${e.edit_count}×</span>`);
+        if(parts.length) meta=`<div class="hmeta">${parts.join('')}</div>`;
       }
-      rows.push(`<div class="hrow"><span class="hd" style="background:${col[st]}"></span><span class="hdate">${pad(d)}/${pad(vM+1)}</span><span class="hwk">${WK[dt.getDay()]}</span><span class="hnote">${lbl[st]}${e.nota?' · '+esc(e.nota):''}</span>${meta}${right}</div>`);}
+      rows.push(`<div class="hrow"><span class="hd" style="background:${col[st]}"></span><span class="hdate">${pad(d)}/${pad(vM+1)}</span><span class="hwk">${WK[dt.getDay()]}</span><span class="hnote">${lbl[st]}${e.nota?' · '+esc(e.nota):''}</span>${right}${meta}</div>`);}
     $('#hist').innerHTML=rows.length?rows.join(''):'<div class="empty">Nenhum dia lançado neste mês.</div>';
   }
   function renderFech(){
